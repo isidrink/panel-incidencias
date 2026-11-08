@@ -1,49 +1,46 @@
 
 import { Head } from '@inertiajs/react';
 import {
-    AlertCircle,
-    CheckCircle2,
-    ClipboardList,
-    Clock3,
-    History,
-    Plus,
-    Search,
-    ShieldAlert,
-    X,
+    Activity, AlertTriangle, Building2, CheckCircle2,
+    ClipboardList, Clock3, History, MapPin, Plus,
+    Search, ShieldAlert, X
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 
 type Status = 'open' | 'review' | 'blocked' | 'resolved';
 type Priority = 'low' | 'medium' | 'high' | 'critical';
-
-type IncidentLog = {
-    id: number;
-    action: string;
-    oldValue: string | null;
-    newValue: string;
-    userName: string;
-    createdAt: string;
-};
 
 type Incident = {
     id: number;
     title: string;
     description: string;
-    status: Status;
+    company: string;
+    address: string;
+    category: string;
     priority: Priority;
+    status: Status;
     requesterName: string;
+    requesterEmail: string;
+    requesterPhone: string;
     assignedTo: string;
     createdAt: string;
     logs: IncidentLog[];
 };
 
-type FormValues = {
-    title: string;
-    description: string;
-    priority: Priority;
-    requesterName: string;
-    assignedTo: string;
+type IncidentLog = {
+    id: number;
+    action: string;
+    from: Status | null;
+    to: Status;
+    actor: string;
+    date: string;
 };
+
+type IncidentFormData = Omit<
+    Incident,
+    'id' | 'status' | 'createdAt' | 'logs'
+>;
 
 const statusLabels: Record<Status, string> = {
     open: 'Abierta',
@@ -59,115 +56,158 @@ const priorityLabels: Record<Priority, string> = {
     critical: 'Crítica',
 };
 
-const statusStyles: Record<Status, string> = {
+const statusColors: Record<Status, string> = {
     open: 'bg-blue-50 text-blue-700 ring-blue-200',
     review: 'bg-amber-50 text-amber-700 ring-amber-200',
     blocked: 'bg-red-50 text-red-700 ring-red-200',
     resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
 };
 
-const priorityStyles: Record<Priority, string> = {
-    low: 'text-slate-600',
-    medium: 'text-amber-700',
-    high: 'text-orange-700',
-    critical: 'font-bold text-red-700',
+const priorityColors: Record<Priority, string> = {
+    low: 'bg-slate-100 text-slate-700',
+    medium: 'bg-yellow-100 text-yellow-800',
+    high: 'bg-orange-100 text-orange-800',
+    critical: 'bg-red-100 text-red-800',
 };
 
-// Transiciones permitidas en la demostración.
-// La misma política se validará posteriormente en Laravel.
-const allowedTransitions: Record<Status, Status[]> = {
+const transitions: Record<Status, Status[]> = {
     open: ['review'],
     review: ['blocked', 'resolved'],
     blocked: ['review', 'resolved'],
     resolved: ['review'],
 };
 
+const categories = [
+    'Climatización',
+    'Electricidad e iluminación',
+    'Fontanería',
+    'Cerrajería y accesos',
+    'Puertas automáticas',
+    'Protección contra incendios',
+    'Limpieza',
+    'Control de plagas',
+    'Mantenimiento general',
+    'Otros',
+];
+
 const initialIncidents: Incident[] = [
     {
         id: 1001,
-        title: 'Error de sincronización en TPV',
-        description: 'El terminal no sincroniza las ventas.',
-        status: 'review',
+        title: 'Aire acondicionado fuera de servicio',
+        description: 'El equipo no enfría la zona comercial.',
+        company: 'Marca Demo A',
+        address: 'Barcelona, España',
+        category: 'Climatización',
         priority: 'critical',
-        requesterName: 'María López',
-        assignedTo: 'Equipo IT',
-        createdAt: '2026-11-06T09:15:00',
+        status: 'review',
+        requesterName: 'Laura García',
+        requesterEmail: 'laura@example.com',
+        requesterPhone: '600000001',
+        assignedTo: 'Equipo HVAC',
+        createdAt: '2026-11-08T09:20:00',
         logs: [],
     },
     {
         id: 1002,
-        title: 'Diferencia de stock en almacén',
-        description: 'El inventario muestra cantidades incorrectas.',
-        status: 'open',
+        title: 'Fallo en iluminación del escaparate',
+        description: 'Varios circuitos no funcionan.',
+        company: 'Marca Demo B',
+        address: 'Madrid, España',
+        category: 'Electricidad e iluminación',
         priority: 'high',
+        status: 'open',
         requesterName: 'Carlos Ruiz',
+        requesterEmail: 'carlos@example.com',
+        requesterPhone: '600000002',
         assignedTo: 'Sin asignar',
-        createdAt: '2026-11-07T11:30:00',
+        createdAt: '2026-11-07T12:00:00',
         logs: [],
     },
     {
         id: 1003,
-        title: 'Acceso bloqueado al sistema',
-        description: 'Un empleado no puede acceder al panel.',
+        title: 'Persiana de acceso bloqueada',
+        description: 'La persiana no puede abrirse.',
+        company: 'Marca Demo C',
+        address: 'Valencia, España',
+        category: 'Cerrajería y accesos',
+        priority: 'critical',
         status: 'blocked',
-        priority: 'high',
-        requesterName: 'Laura García',
-        assignedTo: 'Soporte',
-        createdAt: '2026-11-05T16:45:00',
+        requesterName: 'Ana López',
+        requesterEmail: 'ana@example.com',
+        requesterPhone: '600000003',
+        assignedTo: 'Servicio técnico',
+        createdAt: '2026-11-06T08:10:00',
         logs: [],
     },
     {
         id: 1004,
-        title: 'Actualización de precios',
-        description: 'Se ha corregido la actualización del catálogo.',
+        title: 'Reparación de fuga de agua',
+        description: 'Intervención finalizada correctamente.',
+        company: 'Marca Demo D',
+        address: 'Sevilla, España',
+        category: 'Fontanería',
+        priority: 'medium',
         status: 'resolved',
-        priority: 'low',
         requesterName: 'Javier Martín',
-        assignedTo: 'Equipo IT',
-        createdAt: '2026-11-04T10:00:00',
+        requesterEmail: 'javier@example.com',
+        requesterPhone: '600000004',
+        assignedTo: 'Equipo fontanería',
+        createdAt: '2026-11-05T10:30:00',
         logs: [],
     },
 ];
 
-const emptyForm: FormValues = {
+const emptyForm: IncidentFormData = {
     title: '',
     description: '',
+    company: '',
+    address: '',
+    category: 'Climatización',
     priority: 'medium',
     requesterName: '',
+    requesterEmail: '',
+    requesterPhone: '',
     assignedTo: '',
 };
 
-function StatusBadge({ status }: { status: Status }) {
+function Badge({
+    children,
+    className = '',
+}: {
+    children: ReactNode;
+    className?: string;
+}) {
     return (
         <span
-            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusStyles[status]}`}
+            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${className}`}
         >
-            <span className="mr-2 h-1.5 w-1.5 rounded-full bg-current" />
-            {statusLabels[status]}
+            {children}
         </span>
     );
 }
 
-function PriorityBadge({ priority }: { priority: Priority }) {
+function StatusBadge({ status }: { status: Status }) {
     return (
-        <span className={`text-sm ${priorityStyles[priority]}`}>
-            {priorityLabels[priority]}
-        </span>
+        <Badge className={`${statusColors[status]} ring-1`}>
+            <span className="mr-2 h-1.5 w-1.5 rounded-full bg-current" />
+            {statusLabels[status]}
+        </Badge>
     );
 }
+
 
 function Modal({
     title,
-    onClose,
     children,
+    onClose,
 }: {
     title: string;
+    children: ReactNode;
     onClose: () => void;
-    children: React.ReactNode;
 }) {
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) onClose();
             }}
@@ -176,133 +216,225 @@ function Modal({
                 role="dialog"
                 aria-modal="true"
                 aria-label={title}
-                className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+                className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-2xl dark:bg-white dark:text-slate-900"
             >
-                <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-900">
-                        {title}
-                    </h2>
+                <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-5">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-900">
+                            {title}
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Completa los datos del establecimiento y la incidencia.
+                        </p>
+                    </div>
+
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label="Cerrar"
-                        className="rounded-lg p-2 hover:bg-slate-100"
+                        aria-label="Cerrar formulario"
+                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                     >
                         <X size={20} />
                     </button>
                 </div>
-                {children}
+
+                <div className="min-h-0 flex-1 overflow-y-auto bg-white p-6 text-slate-900">
+                    {children}
+                </div>
             </section>
         </div>
     );
 }
 
-function IncidentForm({
-    onSubmit,
+
+function NewIncidentForm({
+    onSave,
     onCancel,
 }: {
-    onSubmit: (values: FormValues) => void;
+    onSave: (data: IncidentFormData) => void;
     onCancel: () => void;
 }) {
-    const [form, setForm] = useState<FormValues>(emptyForm);
+    const [form, setForm] = useState<IncidentFormData>(emptyForm);
 
-    function update<K extends keyof FormValues>(
-        field: K,
-        value: FormValues[K],
+    const input =
+    'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:bg-white dark:text-slate-900 dark:placeholder:text-slate-400';
+
+    function update<K extends keyof IncidentFormData>(
+        key: K,
+        value: IncidentFormData[K],
     ) {
-        setForm((previous) => ({ ...previous, [field]: value }));
+        setForm((previous) => ({ ...previous, [key]: value }));
     }
 
-    function submit(event: React.FormEvent<HTMLFormElement>) {
+    function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!form.title.trim() || !form.requesterName.trim()) return;
-        onSubmit(form);
+        onSave(form);
     }
-
-    const inputClass =
-        'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
     return (
-        <form onSubmit={submit} className="space-y-4">
-            <div>
-                <label htmlFor="incident-title" className="text-sm font-medium">
-                    Título *
-                </label>
-                <input
-                    id="incident-title"
-                    required
-                    maxLength={150}
-                    value={form.title}
-                    onChange={(e) => update('title', e.target.value)}
-                    className={inputClass}
-                    placeholder="Describe brevemente la incidencia"
-                />
-            </div>
-
-            <div>
-                <label htmlFor="incident-description" className="text-sm font-medium">
-                    Descripción
-                </label>
-                <textarea
-                    id="incident-description"
-                    rows={4}
-                    value={form.description}
-                    onChange={(e) => update('description', e.target.value)}
-                    className={inputClass}
-                    placeholder="Explica qué ha ocurrido..."
-                />
-            </div>
+        <form onSubmit={submit} className="space-y-5">
+            <p className="text-sm text-slate-500">
+                Registra una solicitud de mantenimiento para un establecimiento.
+            </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                    <label htmlFor="incident-priority" className="text-sm font-medium">
-                        Prioridad
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="company">
+                        Empresa / Marca *
                     </label>
-                    <select
-                        id="incident-priority"
-                        value={form.priority}
-                        onChange={(e) =>
-                            update('priority', e.target.value as Priority)
-                        }
-                        className={inputClass}
-                    >
-                        {Object.entries(priorityLabels).map(([key, label]) => (
-                            <option key={key} value={key}>
-                                {label}
-                            </option>
-                        ))}
-                    </select>
+                    <input
+                        id="company"
+                        required
+                        value={form.company}
+                        onChange={(e) => update('company', e.target.value)}
+                        className={input}
+                        placeholder="Nombre de la marca"
+                    />
                 </div>
 
                 <div>
-                    <label htmlFor="incident-requester" className="text-sm font-medium">
-                        Solicitante *
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="address">
+                        Dirección del establecimiento *
                     </label>
                     <input
-                        id="incident-requester"
+                        id="address"
                         required
-                        value={form.requesterName}
-                        onChange={(e) => update('requesterName', e.target.value)}
-                        className={inputClass}
-                        placeholder="Nombre del solicitante"
+                        value={form.address}
+                        onChange={(e) => update('address', e.target.value)}
+                        className={input}
+                        placeholder="Dirección completa"
                     />
                 </div>
             </div>
 
             <div>
-                <label htmlFor="incident-assignee" className="text-sm font-medium">
-                    Responsable
+                <label className="text-sm font-semibold text-slate-700" htmlFor="title">
+                    Incidencia *
                 </label>
                 <input
-                    id="incident-assignee"
-                    value={form.assignedTo}
-                    onChange={(e) => update('assignedTo', e.target.value)}
-                    className={inputClass}
-                    placeholder="Opcional"
+                    id="title"
+                    required
+                    maxLength={150}
+                    value={form.title}
+                    onChange={(e) => update('title', e.target.value)}
+                    className={input}
+                    placeholder="Ej. Aire acondicionado averiado"
                 />
             </div>
 
-            <div className="flex justify-end gap-3 border-t pt-5">
+            <div>
+                <label className="text-sm font-semibold text-slate-700" htmlFor="description">
+                    Descripción del problema *
+                </label>
+                <textarea
+                    id="description"
+                    required
+                    rows={3}
+                    value={form.description}
+                    onChange={(e) => update('description', e.target.value)}
+                    className={input}
+                    placeholder="Describe qué ocurre y cómo afecta a la tienda"
+                />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="category">
+                        Tipo de mantenimiento
+                    </label>
+                    <select
+                        id="category"
+                        value={form.category}
+                        onChange={(e) => update('category', e.target.value)}
+                        className={input}
+                    >
+                        {categories.map((category) => (
+                            <option key={category}>{category}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="priority">
+                        Prioridad *
+                    </label>
+                    <select
+                        id="priority"
+                        value={form.priority}
+                        onChange={(e) =>
+                            update('priority', e.target.value as Priority)
+                        }
+                        className={input}
+                    >
+                        {Object.entries(priorityLabels).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            <div className="border-t pt-5">
+                <h3 className="mb-4 font-bold text-slate-900">
+                    Datos del solicitante
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                        <label className="text-sm font-semibold text-slate-700" htmlFor="requester">
+                            Nombre completo *
+                        </label>
+                        <input
+                            id="requester"
+                            required
+                            value={form.requesterName}
+                            onChange={(e) => update('requesterName', e.target.value)}
+                            className={input}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-sm font-semibold text-slate-700" htmlFor="email">
+                            Correo electrónico *
+                        </label>
+                        <input
+                            id="email"
+                            type="email"
+                            required
+                            value={form.requesterEmail}
+                            onChange={(e) => update('requesterEmail', e.target.value)}
+                            className={input}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-sm font-semibold text-slate-700" htmlFor="phone">
+                            Teléfono *
+                        </label>
+                        <input
+                            id="phone"
+                            type="tel"
+                            required
+                            value={form.requesterPhone}
+                            onChange={(e) => update('requesterPhone', e.target.value)}
+                            className={input}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label className="text-sm font-semibold text-slate-700" htmlFor="assignee">
+                    Responsable asignado
+                </label>
+                <input
+                    id="assignee"
+                    value={form.assignedTo}
+                    onChange={(e) => update('assignedTo', e.target.value)}
+                    className={input}
+                    placeholder="Opcional · Asignación interna"
+                />
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-3 border-t pt-5">
                 <button
                     type="button"
                     onClick={onCancel}
@@ -312,9 +444,9 @@ function IncidentForm({
                 </button>
                 <button
                     type="submit"
-                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                    className="rounded-lg bg-blue-700 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
                 >
-                    Crear incidencia
+                    Registrar incidencia
                 </button>
             </div>
         </form>
@@ -322,130 +454,106 @@ function IncidentForm({
 }
 
 function formatDate(date: string) {
-    return new Intl.DateTimeFormat('es-ES', {
+    return new Date(date).toLocaleDateString('es-ES', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
-    }).format(new Date(date));
+    });
 }
 
 export default function Landing() {
     const [incidents, setIncidents] = useState(initialIncidents);
+    const [showForm, setShowForm] = useState(false);
+    const [historyId, setHistoryId] = useState<number | null>(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [priorityFilter, setPriorityFilter] = useState('all');
-    const [createOpen, setCreateOpen] = useState(false);
-    const [historyId, setHistoryId] = useState<number | null>(null);
 
     const selectedIncident = incidents.find((i) => i.id === historyId);
 
-    const counts = useMemo(
-        () => ({
-            total: incidents.length,
-            open: incidents.filter((i) => i.status === 'open').length,
-            review: incidents.filter((i) => i.status === 'review').length,
-            blocked: incidents.filter((i) => i.status === 'blocked').length,
-            resolved: incidents.filter((i) => i.status === 'resolved').length,
-        }),
-        [incidents],
-    );
+    const counts = useMemo(() => ({
+        total: incidents.length,
+        open: incidents.filter((i) => i.status === 'open').length,
+        review: incidents.filter((i) => i.status === 'review').length,
+        blocked: incidents.filter((i) => i.status === 'blocked').length,
+        resolved: incidents.filter((i) => i.status === 'resolved').length,
+    }), [incidents]);
 
-    const filtered = useMemo(() => {
-        const query = search.trim().toLowerCase();
+    const filtered = useMemo(() => incidents.filter((incident) => {
+        const text = search.trim().toLowerCase();
+        const searchable = [
+            incident.title,
+            incident.company,
+            incident.address,
+            incident.category,
+            incident.requesterName,
+            incident.assignedTo,
+        ].join(' ').toLowerCase();
 
-        return incidents.filter((incident) => {
-            const matchesText = [
-                incident.title,
-                incident.description,
-                incident.requesterName,
-                incident.assignedTo,
-            ].some((value) => value.toLowerCase().includes(query));
+        return searchable.includes(text)
+            && (statusFilter === 'all' || incident.status === statusFilter)
+            && (priorityFilter === 'all' || incident.priority === priorityFilter);
+    }), [incidents, search, statusFilter, priorityFilter]);
 
-            return (
-                matchesText &&
-                (statusFilter === 'all' || incident.status === statusFilter) &&
-                (priorityFilter === 'all' || incident.priority === priorityFilter)
-            );
-        });
-    }, [incidents, search, statusFilter, priorityFilter]);
-
-    function createIncident(values: FormValues) {
+    function createIncident(data: IncidentFormData) {
         const id = Math.max(1000, ...incidents.map((i) => i.id)) + 1;
         const now = new Date().toISOString();
 
-        const incident: Incident = {
+        setIncidents((previous) => [{
+            ...data,
             id,
-            title: values.title.trim(),
-            description: values.description.trim(),
-            priority: values.priority,
-            requesterName: values.requesterName.trim(),
-            assignedTo: values.assignedTo.trim() || 'Sin asignar',
             status: 'open',
+            assignedTo: data.assignedTo || 'Sin asignar',
             createdAt: now,
-            logs: [
-                {
-                    id: Date.now(),
-                    action: 'created',
-                    oldValue: null,
-                    newValue: 'open',
-                    userName: 'Operador demo',
-                    createdAt: now,
-                },
-            ],
-        };
+            logs: [{
+                id: Date.now(),
+                action: 'created',
+                from: null,
+                to: 'open',
+                actor: 'Operador demo',
+                date: now,
+            }],
+        }, ...previous]);
 
-        setIncidents((previous) => [incident, ...previous]);
-        setCreateOpen(false);
+        setShowForm(false);
     }
 
-    function changeStatus(id: number, nextStatus: Status) {
-        const incident = incidents.find((item) => item.id === id);
-        if (!incident) return;
-
-        if (!allowedTransitions[incident.status].includes(nextStatus)) {
-            return;
-        }
+    function changeStatus(id: number, next: Status) {
+        const current = incidents.find((i) => i.id === id);
+        if (!current || !transitions[current.status].includes(next)) return;
 
         if (
-            ['blocked', 'resolved'].includes(nextStatus) &&
+            (next === 'blocked' || next === 'resolved') &&
             !window.confirm(
-                `¿Confirmas cambiar la incidencia #${id} a "${statusLabels[nextStatus]}"?`,
+                `¿Confirmas cambiar la incidencia #${id} a ${statusLabels[next]}?`
             )
-        ) {
-            return;
-        }
+        ) return;
 
         const now = new Date().toISOString();
 
-        setIncidents((previous) =>
-            previous.map((item) =>
-                item.id === id
-                    ? {
-                          ...item,
-                          status: nextStatus,
-                          logs: [
-                              ...item.logs,
-                              {
-                                  id: Date.now(),
-                                  action:
-                                      item.status === 'resolved'
-                                          ? 'reopened'
-                                          : 'status_changed',
-                                  oldValue: item.status,
-                                  newValue: nextStatus,
-                                  userName: 'Operador demo',
-                                  createdAt: now,
-                              },
-                          ],
-                      }
-                    : item,
-            ),
-        );
+        setIncidents((previous) => previous.map((incident) =>
+            incident.id === id
+                ? {
+                    ...incident,
+                    status: next,
+                    logs: [...incident.logs, {
+                        id: Date.now(),
+                        action: incident.status === 'resolved'
+                            ? 'reopened'
+                            : 'status_changed',
+                        from: incident.status,
+                        to: next,
+                        actor: 'Operador demo',
+                        date: now,
+                    }],
+                }
+                : incident
+        ));
     }
 
     const stats = [
-        { label: 'Total', value: counts.total, icon: ClipboardList, color: 'text-slate-700' },
-        { label: 'Abiertas', value: counts.open, icon: AlertCircle, color: 'text-blue-600' },
+        { label: 'Total incidencias', value: counts.total, icon: ClipboardList, color: 'text-slate-700' },
+        { label: 'Abiertas', value: counts.open, icon: Activity, color: 'text-blue-600' },
         { label: 'En revisión', value: counts.review, icon: Clock3, color: 'text-amber-600' },
         { label: 'Bloqueadas', value: counts.blocked, icon: ShieldAlert, color: 'text-red-600' },
         { label: 'Resueltas', value: counts.resolved, icon: CheckCircle2, color: 'text-emerald-600' },
@@ -453,41 +561,53 @@ export default function Landing() {
 
     return (
         <>
-            <Head title="Panel operativo de incidencias" />
+            <Head title="Panel de incidencias | Optima Retail" />
 
-            <div className="min-h-screen bg-slate-50 text-slate-900">
-                <header className="border-b border-slate-200 bg-white">
-                    <div className="mx-auto flex max-w-7xl items-center gap-3 px-5 py-5 sm:px-8">
-                        <div className="rounded-xl bg-blue-600 p-3 text-white">
-                            <ClipboardList size={24} />
+            <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
+                <header className="bg-[#101b30] text-white">
+                    <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6 sm:px-8">
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-xl bg-blue-600 p-3">
+                                <Building2 size={25} />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+                                    Optima Retail
+                                </p>
+                                <h1 className="text-xl font-bold">
+                                    Facility Management
+                                </h1>
+                                <p className="text-xs text-slate-300">
+                                    Panel operativo de incidencias
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-xl font-bold">
-                                Panel operativo de incidencias
-                            </h1>
-                            <p className="text-sm text-slate-500">
-                                Gestión, seguimiento y trazabilidad operativa
-                            </p>
-                        </div>
+                        <span className="rounded-full border border-slate-600 px-4 py-2 text-xs text-slate-200">
+                            Gestión de mantenimiento · 24/7
+                        </span>
                     </div>
                 </header>
 
                 <main className="mx-auto max-w-7xl space-y-7 px-5 py-8 sm:px-8">
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-blue-700">
+                                Operaciones / Incidencias
+                            </p>
+                            <h2 className="mt-2 text-3xl font-bold">
                                 Gestión de incidencias
                             </h2>
-                            <p className="mt-1 text-sm text-slate-500">
-                                Consulta, registra y actualiza las incidencias.
+                            <p className="mt-2 text-sm text-slate-500">
+                                Control y seguimiento del mantenimiento de establecimientos comerciales.
                             </p>
                         </div>
+
                         <button
                             type="button"
-                            onClick={() => setCreateOpen(true)}
-                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                            onClick={() => setShowForm(true)}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-800"
                         >
-                            <Plus size={18} />
+                            <Plus size={19} />
                             Nueva incidencia
                         </button>
                     </div>
@@ -498,39 +618,32 @@ export default function Landing() {
                                 key={stat.label}
                                 className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                             >
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm text-slate-500">
-                                        {stat.label}
-                                    </span>
-                                    <stat.icon size={20} className={stat.color} />
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm text-slate-500">{stat.label}</span>
+                                    <stat.icon className={stat.color} size={20} />
                                 </div>
-                                <div className="mt-3 text-3xl font-bold">
-                                    {stat.value}
-                                </div>
+                                <p className="mt-4 text-3xl font-bold">{stat.value}</p>
                             </div>
                         ))}
                     </div>
 
                     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                         <div className="border-b border-slate-200 p-5">
-                            <h3 className="text-lg font-bold">
-                                Listado de incidencias
-                            </h3>
-                            <p className="text-sm text-slate-500">
-                                {filtered.length} resultados
-                            </p>
+                            <div className="mb-5">
+                                <h3 className="text-lg font-bold">Incidencias registradas</h3>
+                                <p className="text-sm text-slate-500">
+                                    {filtered.length} incidencias encontradas
+                                </p>
+                            </div>
 
-                            <div className="mt-5 grid gap-3 md:grid-cols-3">
+                            <div className="grid gap-3 md:grid-cols-3">
                                 <div className="relative">
-                                    <Search
-                                        size={18}
-                                        className="absolute left-3 top-3 text-slate-400"
-                                    />
+                                    <Search size={18} className="absolute left-3 top-3 text-slate-400" />
                                     <input
                                         aria-label="Buscar incidencias"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Buscar incidencias..."
+                                        placeholder="Buscar tienda, avería, técnico..."
                                         className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-3 text-sm"
                                     />
                                 </div>
@@ -542,10 +655,8 @@ export default function Landing() {
                                     className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
                                 >
                                     <option value="all">Todos los estados</option>
-                                    {Object.entries(statusLabels).map(([key, label]) => (
-                                        <option key={key} value={key}>
-                                            {label}
-                                        </option>
+                                    {Object.entries(statusLabels).map(([key, value]) => (
+                                        <option key={key} value={key}>{value}</option>
                                     ))}
                                 </select>
 
@@ -556,90 +667,90 @@ export default function Landing() {
                                     className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
                                 >
                                     <option value="all">Todas las prioridades</option>
-                                    {Object.entries(priorityLabels).map(([key, label]) => (
-                                        <option key={key} value={key}>
-                                            {label}
-                                        </option>
+                                    {Object.entries(priorityLabels).map(([key, value]) => (
+                                        <option key={key} value={key}>{value}</option>
                                     ))}
                                 </select>
                             </div>
                         </div>
 
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[900px] text-left text-sm">
-                                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                            <table className="w-full min-w-[1000px] text-left text-sm">
+                                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                                     <tr>
                                         {[
                                             'Incidencia',
+                                            'Establecimiento',
                                             'Prioridad',
                                             'Estado',
-                                            'Solicitante / Responsable',
+                                            'Responsable',
                                             'Fecha',
                                             'Acciones',
-                                        ].map((heading) => (
-                                            <th key={heading} className="px-5 py-4 font-semibold">
-                                                {heading}
+                                        ].map((label) => (
+                                            <th key={label} className="px-5 py-4 font-semibold">
+                                                {label}
                                             </th>
                                         ))}
                                     </tr>
                                 </thead>
-
                                 <tbody className="divide-y divide-slate-100">
                                     {filtered.map((incident) => (
-                                        <tr key={incident.id} className="hover:bg-slate-50">
+                                        <tr key={incident.id} className="hover:bg-blue-50/40">
                                             <td className="px-5 py-4">
-                                                <div className="font-semibold">
-                                                    {incident.title}
-                                                </div>
-                                                <div className="mt-1 text-xs text-slate-400">
-                                                    #{incident.id}
-                                                </div>
+                                                <p className="font-semibold">{incident.title}</p>
+                                                <p className="mt-1 text-xs text-slate-500">
+                                                    #{incident.id} · {incident.category}
+                                                </p>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <PriorityBadge priority={incident.priority} />
+                                                <p className="font-medium">{incident.company}</p>
+                                                <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                                                    <MapPin size={12} />
+                                                    {incident.address}
+                                                </p>
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <Badge className={priorityColors[incident.priority]}>
+                                                    {priorityLabels[incident.priority]}
+                                                </Badge>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <StatusBadge status={incident.status} />
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div>{incident.requesterName}</div>
-                                                <div className="text-xs text-slate-500">
-                                                    {incident.assignedTo}
-                                                </div>
+                                                <p>{incident.assignedTo}</p>
+                                                <p className="text-xs text-slate-500">
+                                                    Sol.: {incident.requesterName}
+                                                </p>
                                             </td>
                                             <td className="px-5 py-4 text-slate-500">
                                                 {formatDate(incident.createdAt)}
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2">
                                                     <select
-                                                        aria-label={`Cambiar estado de incidencia ${incident.id}`}
+                                                        aria-label={`Estado de incidencia ${incident.id}`}
                                                         value={incident.status}
                                                         onChange={(e) =>
-                                                            changeStatus(
-                                                                incident.id,
-                                                                e.target.value as Status,
-                                                            )
+                                                            changeStatus(incident.id, e.target.value as Status)
                                                         }
-                                                        className="max-w-36 rounded-lg border border-slate-300 px-2 py-2 text-xs"
+                                                        className="max-w-36 rounded-lg border border-slate-300 p-2 text-xs"
                                                     >
                                                         <option value={incident.status}>
                                                             {statusLabels[incident.status]}
                                                         </option>
-                                                        {allowedTransitions[incident.status].map(
-                                                            (status) => (
-                                                                <option key={status} value={status}>
-                                                                    {statusLabels[status]}
-                                                                </option>
-                                                            ),
-                                                        )}
+                                                        {transitions[incident.status].map((status) => (
+                                                            <option key={status} value={status}>
+                                                                {statusLabels[status]}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setHistoryId(incident.id)}
                                                         title="Ver historial"
                                                         aria-label={`Ver historial de incidencia ${incident.id}`}
-                                                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                                        onClick={() => setHistoryId(incident.id)}
+                                                        className="rounded-lg p-2 text-blue-700 hover:bg-blue-50"
                                                     >
                                                         <History size={19} />
                                                     </button>
@@ -649,7 +760,6 @@ export default function Landing() {
                                     ))}
                                 </tbody>
                             </table>
-
                             {filtered.length === 0 && (
                                 <div className="p-12 text-center text-slate-500">
                                     No se han encontrado incidencias.
@@ -659,56 +769,54 @@ export default function Landing() {
                     </section>
 
                     <p className="text-center text-xs text-slate-400">
-                        Panel de incidencias · Demostración frontend sin persistencia
+                        Prototipo de prueba técnica · Datos simulados, sin persistencia
                     </p>
                 </main>
             </div>
 
-            {createOpen && (
-                <Modal
-                    title="Crear nueva incidencia"
-                    onClose={() => setCreateOpen(false)}
-                >
-                    <IncidentForm
-                        onSubmit={createIncident}
-                        onCancel={() => setCreateOpen(false)}
+            {showForm && (
+                <Modal title="Nueva incidencia de mantenimiento" onClose={() => setShowForm(false)}>
+                    <NewIncidentForm
+                        onSave={createIncident}
+                        onCancel={() => setShowForm(false)}
                     />
                 </Modal>
             )}
 
             {selectedIncident && (
                 <Modal
-                    title={`Historial · Incidencia #${selectedIncident.id}`}
+                    title={`Historial de incidencia #${selectedIncident.id}`}
                     onClose={() => setHistoryId(null)}
                 >
-                    <h3 className="mb-5 font-semibold">
-                        {selectedIncident.title}
-                    </h3>
+                    <div className="mb-6 rounded-lg bg-slate-50 p-4">
+                        <p className="font-semibold">{selectedIncident.title}</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                            {selectedIncident.company} · {selectedIncident.address}
+                        </p>
+                    </div>
 
                     {selectedIncident.logs.length === 0 ? (
-                        <p className="rounded-lg bg-slate-50 p-5 text-sm text-slate-500">
-                            No hay registros de historial disponibles en los datos de demostración.
-                        </p>
+                        <div className="flex items-start gap-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+                            <AlertTriangle size={19} className="shrink-0" />
+                            No hay registros de historial en los datos de demostración.
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             {[...selectedIncident.logs].reverse().map((log) => (
-                                <div key={log.id} className="border-l-2 border-blue-300 pl-4">
-                                    <p className="font-medium">
+                                <div key={log.id} className="border-l-2 border-blue-400 pl-4">
+                                    <p className="font-semibold">
                                         {log.action === 'created'
-                                            ? 'Incidencia creada'
+                                            ? 'Incidencia registrada'
                                             : log.action === 'reopened'
-                                              ? 'Incidencia reabierta'
-                                              : 'Cambio de estado'}
+                                                ? 'Incidencia reabierta'
+                                                : 'Cambio de estado'}
                                     </p>
                                     <p className="mt-1 text-sm text-slate-600">
-                                        {log.oldValue
-                                            ? `${statusLabels[log.oldValue as Status]} → `
-                                            : ''}
-                                        {statusLabels[log.newValue as Status]}
+                                        {log.from ? `${statusLabels[log.from]} → ` : ''}
+                                        {statusLabels[log.to]}
                                     </p>
-                                    <p className="mt-1 text-xs text-slate-400">
-                                        {log.userName} ·{' '}
-                                        {new Date(log.createdAt).toLocaleString('es-ES')}
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        {log.actor} · {new Date(log.date).toLocaleString('es-ES')}
                                     </p>
                                 </div>
                             ))}
