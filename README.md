@@ -178,7 +178,7 @@ php artisan test
 
 ## Autenticación
 
-No se ha implementado autenticación, ya que es opcional en la prueba técnica.
+No se ha implementado autenticación.
 
 ## Consideraciones para producción
 
