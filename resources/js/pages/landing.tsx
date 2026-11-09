@@ -195,7 +195,6 @@ function Badge({
 function StatusBadge({ status }: { status: Status }) {
     return (
         <Badge className={`${statusColors[status]} ring-1`}>
-            <span className="mr-2 h-1.5 w-1.5 rounded-full bg-current" />
             {statusLabels[status]}
         </Badge>
     );
