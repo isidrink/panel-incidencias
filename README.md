@@ -24,7 +24,7 @@ Aplicación de gestión operativa de incidencias desarrollada como prueba técni
 Clonar el repositorio:
 
 ```bash
-git clone URL_DEL_REPOSITORIO
+git clone [URL_DEL_REPOSITORIO](https://github.com/isidrink/panel-incidencias.git)
 cd panel-incidencias
 ```
 
