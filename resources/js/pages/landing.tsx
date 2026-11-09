@@ -1,15 +1,15 @@
 
-import { Head } from '@inertiajs/react';
+import { Head,  router, usePage } from '@inertiajs/react';
 import {
     Activity, AlertTriangle, Building2, CheckCircle2,
     ClipboardList, Clock3, History, MapPin, Plus,
     Search, ShieldAlert, X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
 type Status = 'open' | 'review' | 'blocked' | 'resolved';
-type Priority = 'low' | 'medium' | 'high' | 'critical';
+type Priority = 'green' | 'yellow' | 'red';
 
 type Incident = {
     id: number;
@@ -18,14 +18,15 @@ type Incident = {
     company: string;
     address: string;
     category: string;
-    priority: Priority;
     status: Status;
+    priority: Priority;
     requesterName: string;
     requesterEmail: string;
     requesterPhone: string;
-    assignedTo: string;
+    assignedTo: string | null;
     createdAt: string;
-    logs: IncidentLog[];
+    logs?: IncidentLog[];
+    comments?: IncidentComment[];
 };
 
 type IncidentLog = {
@@ -35,6 +36,13 @@ type IncidentLog = {
     to: Status;
     actor: string;
     date: string;
+};
+
+type IncidentComment = {
+    id: number;
+    authorName: string;
+    body: string;
+    createdAt: string;
 };
 
 type IncidentFormData = Omit<
@@ -50,10 +58,9 @@ const statusLabels: Record<Status, string> = {
 };
 
 const priorityLabels: Record<Priority, string> = {
-    low: 'Baja',
-    medium: 'Media',
-    high: 'Alta',
-    critical: 'Crítica',
+    green: '🟢 Bajo impacto',
+    yellow: '🟡 Medio impacto',
+    red: '🔴 Urgencia',
 };
 
 const statusColors: Record<Status, string> = {
@@ -64,10 +71,9 @@ const statusColors: Record<Status, string> = {
 };
 
 const priorityColors: Record<Priority, string> = {
-    low: 'bg-slate-100 text-slate-700',
-    medium: 'bg-yellow-100 text-yellow-800',
-    high: 'bg-orange-100 text-orange-800',
-    critical: 'bg-red-100 text-red-800',
+    green: 'bg-green-100 text-green-800 ring-1 ring-green-200',
+    yellow: 'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200',
+    red: 'bg-red-100 text-red-800 ring-1 ring-red-200',
 };
 
 const transitions: Record<Status, Status[]> = {
@@ -98,7 +104,7 @@ const initialIncidents: Incident[] = [
         company: 'Marca Demo A',
         address: 'Barcelona, España',
         category: 'Climatización',
-        priority: 'critical',
+        priority: 'yellow',
         status: 'review',
         requesterName: 'Laura García',
         requesterEmail: 'laura@example.com',
@@ -114,7 +120,7 @@ const initialIncidents: Incident[] = [
         company: 'Marca Demo B',
         address: 'Madrid, España',
         category: 'Electricidad e iluminación',
-        priority: 'high',
+        priority: 'red',
         status: 'open',
         requesterName: 'Carlos Ruiz',
         requesterEmail: 'carlos@example.com',
@@ -130,7 +136,7 @@ const initialIncidents: Incident[] = [
         company: 'Marca Demo C',
         address: 'Valencia, España',
         category: 'Cerrajería y accesos',
-        priority: 'critical',
+        priority: 'red',
         status: 'blocked',
         requesterName: 'Ana López',
         requesterEmail: 'ana@example.com',
@@ -146,7 +152,7 @@ const initialIncidents: Incident[] = [
         company: 'Marca Demo D',
         address: 'Sevilla, España',
         category: 'Fontanería',
-        priority: 'medium',
+        priority: 'green',
         status: 'resolved',
         requesterName: 'Javier Martín',
         requesterEmail: 'javier@example.com',
@@ -163,7 +169,7 @@ const emptyForm: IncidentFormData = {
     company: '',
     address: '',
     category: 'Climatización',
-    priority: 'medium',
+    priority: 'green',
     requesterName: '',
     requesterEmail: '',
     requesterPhone: '',
@@ -461,8 +467,123 @@ function formatDate(date: string) {
     });
 }
 
+
+function NewCommentForm({
+    incidentId,
+}: {
+    incidentId: number;
+}) {
+    const [authorName, setAuthorName] = useState('');
+    const [body, setBody] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        router.post(
+            `/incidents/${incidentId}/comments`,
+            {
+                author_name: authorName,
+                body,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+
+                onStart: () => setSaving(true),
+
+                onSuccess: () => {
+                    setBody('');
+                    setErrors({});
+                },
+
+                onError: (validationErrors) => {
+                    setErrors(validationErrors);
+                },
+
+                onFinish: () => setSaving(false),
+            }
+        );
+    }
+
+    return (
+        <form
+            onSubmit={submit}
+            className="mt-6 space-y-4 border-t border-slate-200 pt-5"
+        >
+            <h3 className="font-bold text-slate-900">
+                Añadir comentario
+            </h3>
+
+            <div>
+                <label className="text-sm font-medium text-slate-700">
+                    Nombre del autor
+                </label>
+                <input
+                    required
+                    maxLength={150}
+                    value={authorName}
+                    onChange={(e) => setAuthorName(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                />
+                {errors.author_name && (
+                    <p className="mt-1 text-sm text-red-600">
+                        {errors.author_name}
+                    </p>
+                )}
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-slate-700">
+                    Comentario
+                </label>
+                <textarea
+                    required
+                    maxLength={5000}
+                    rows={3}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Escribe una actualización..."
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                />
+                {errors.body && (
+                    <p className="mt-1 text-sm text-red-600">
+                        {errors.body}
+                    </p>
+                )}
+            </div>
+
+            <div className="flex justify-end">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-blue-700 px-5 py-2.5 font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                >
+                    {saving ? 'Guardando...' : 'Publicar comentario'}
+                </button>
+            </div>
+        </form>
+    );
+}
+
+
 export default function Landing() {
-    const [incidents, setIncidents] = useState(initialIncidents);
+    const { incidents: dbIncidents } = usePage<{
+        incidents: Incident[];
+    }>().props;
+
+    const [incidents, setIncidents] = useState<Incident[]>(
+        dbIncidents ?? []
+    );
+
+
+    // AQUÍ DEBES AÑADIR EL useEffect
+    useEffect(() => {
+        setIncidents(dbIncidents ?? []);
+    }, [dbIncidents]);
+
+    
     const [showForm, setShowForm] = useState(false);
     const [historyId, setHistoryId] = useState<number | null>(null);
     const [search, setSearch] = useState('');
@@ -470,6 +591,29 @@ export default function Landing() {
     const [priorityFilter, setPriorityFilter] = useState('all');
 
     const selectedIncident = incidents.find((i) => i.id === historyId);
+
+    
+    const historyEvents = selectedIncident
+    ? [
+        ...(selectedIncident.logs ?? []).map((log) => ({
+            key: `log-${log.id}`,
+            type: 'log' as const,
+            date: log.date,
+            log,
+        })),
+
+        ...(selectedIncident.comments ?? []).map((comment) => ({
+            key: `comment-${comment.id}`,
+            type: 'comment' as const,
+            date: comment.createdAt,
+            comment,
+        })),
+    ].sort(
+        (a, b) =>
+            new Date(b.date).getTime() -
+            new Date(a.date).getTime()
+    )
+    : [];
 
     const counts = useMemo(() => ({
         total: incidents.length,
@@ -495,61 +639,113 @@ export default function Landing() {
             && (priorityFilter === 'all' || incident.priority === priorityFilter);
     }), [incidents, search, statusFilter, priorityFilter]);
 
+        
+        
     function createIncident(data: IncidentFormData) {
-        const id = Math.max(1000, ...incidents.map((i) => i.id)) + 1;
-        const now = new Date().toISOString();
+        
+        console.log('Enviando incidencia a Laravel:', data);
 
-        setIncidents((previous) => [{
-            ...data,
-            id,
-            status: 'open',
-            assignedTo: data.assignedTo || 'Sin asignar',
-            createdAt: now,
-            logs: [{
-                id: Date.now(),
-                action: 'created',
-                from: null,
-                to: 'open',
-                actor: 'Operador demo',
-                date: now,
-            }],
-        }, ...previous]);
+        router.post(
+            '/incidents',
+            {
+                title: data.title,
+                description: data.description,
+                company: data.company,
+                address: data.address,
+                category: data.category,
+                priority: data.priority,
+                requester_name: data.requesterName,
+                requester_email: data.requesterEmail,
+                requester_phone: data.requesterPhone,
+                assigned_to: data.assignedTo || null,
+            },
+            {
+                preserveScroll: true,
 
-        setShowForm(false);
+                onStart: () => {
+                    console.log('Iniciando petición POST...');
+                },
+
+                onSuccess: () => {
+                    console.log('Laravel ha respondido correctamente');
+                    setShowForm(false);
+                },
+
+                onError: (errors) => {
+                    console.error('Errores de Laravel:', errors);
+                },
+
+                onFinish: () => {
+                    console.log('Petición finalizada');
+                },
+            }
+        );
     }
 
+
+
+    
     function changeStatus(id: number, next: Status) {
         const current = incidents.find((i) => i.id === id);
-        if (!current || !transitions[current.status].includes(next)) return;
 
-        if (
-            (next === 'blocked' || next === 'resolved') &&
-            !window.confirm(
-                `¿Confirmas cambiar la incidencia #${id} a ${statusLabels[next]}?`
-            )
-        ) return;
+        if (!current || current.status === next) return;
 
-        const now = new Date().toISOString();
+        if (!transitions[current.status].includes(next)) {
+            alert('Transición de estado no permitida.');
+            return;
+        }
 
-        setIncidents((previous) => previous.map((incident) =>
-            incident.id === id
-                ? {
-                    ...incident,
-                    status: next,
-                    logs: [...incident.logs, {
-                        id: Date.now(),
-                        action: incident.status === 'resolved'
-                            ? 'reopened'
-                            : 'status_changed',
-                        from: incident.status,
-                        to: next,
-                        actor: 'Operador demo',
-                        date: now,
-                    }],
-                }
-                : incident
-        ));
+        const confirmed = window.confirm(
+            `¿Confirmas cambiar la incidencia #${id}?\n\n` +
+            `${statusLabels[current.status]} → ${statusLabels[next]}`
+        );
+
+        if (!confirmed) return;
+
+        const actor = window.prompt(
+            'Nombre del usuario que realiza el cambio:',
+            'Operador'
+        );
+
+        if (actor === null) return;
+
+        if (!actor.trim()) {
+            alert('Debes indicar un usuario.');
+            return;
+        }
+
+        console.log('Enviando PATCH:', {
+            id,
+            status: next,
+            actor: actor.trim(),
+        });
+
+        router.patch(
+            `/incidents/${id}/status`,
+            {
+                status: next,
+                actor: actor.trim(),
+            },
+            {
+                preserveScroll: true,
+
+                onSuccess: () => {
+                    console.log('Petición PATCH completada.');
+                },
+
+                onError: (errors) => {
+                    console.error('Error actualizando estado:', errors);
+
+                    alert(
+                        Object.values(errors).join('\n') ||
+                        'No se pudo actualizar la incidencia.'
+                    );
+                },
+            }
+        );
     }
+
+
 
     const stats = [
         { label: 'Total incidencias', value: counts.total, icon: ClipboardList, color: 'text-slate-700' },
@@ -795,33 +991,65 @@ export default function Landing() {
                         </p>
                     </div>
 
-                    {selectedIncident.logs.length === 0 ? (
-                        <div className="flex items-start gap-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-                            <AlertTriangle size={19} className="shrink-0" />
-                            No hay registros de historial en los datos de demostración.
-                        </div>
+                    
+                    {historyEvents.length === 0 ? (
+                        <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+                            Esta incidencia todavía no tiene actividad registrada.
+                        </p>
                     ) : (
                         <div className="space-y-4">
-                            {[...selectedIncident.logs].reverse().map((log) => (
-                                <div key={log.id} className="border-l-2 border-blue-400 pl-4">
-                                    <p className="font-semibold">
-                                        {log.action === 'created'
-                                            ? 'Incidencia registrada'
-                                            : log.action === 'reopened'
-                                                ? 'Incidencia reabierta'
-                                                : 'Cambio de estado'}
-                                    </p>
-                                    <p className="mt-1 text-sm text-slate-600">
-                                        {log.from ? `${statusLabels[log.from]} → ` : ''}
-                                        {statusLabels[log.to]}
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                        {log.actor} · {new Date(log.date).toLocaleString('es-ES')}
-                                    </p>
+                            {historyEvents.map((event) => (
+                                <div
+                                    key={event.key}
+                                    className="border-l-2 border-blue-400 pl-4"
+                                >
+                                    {event.type === 'log' ? (
+                                        <>
+                                            <p className="font-semibold text-slate-900">
+                                                {event.log.action === 'created'
+                                                    ? 'Incidencia registrada'
+                                                    : event.log.action === 'reopened'
+                                                        ? 'Incidencia reabierta'
+                                                        : 'Cambio de estado'}
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-slate-600">
+                                                {event.log.from
+                                                    ? `${statusLabels[event.log.from]} → `
+                                                    : ''}
+                                                {event.log.to
+                                                    ? statusLabels[event.log.to]
+                                                    : 'Sin estado'}
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                {event.log.actor} ·{' '}
+                                                {new Date(event.date).toLocaleString('es-ES')}
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="font-semibold text-blue-700">
+                                                Comentario añadido
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-slate-700">
+                                                {event.comment.body}
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                {event.comment.authorName} ·{' '}
+                                                {new Date(event.date).toLocaleString('es-ES')}
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     )}
+
+                    <NewCommentForm incidentId={selectedIncident.id} />
+
 
                     <button
                         type="button"
